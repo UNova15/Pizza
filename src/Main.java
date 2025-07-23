@@ -1,36 +1,45 @@
 import java.util.LinkedList;
-import java.util.Arrays;
 import java.util.Scanner;
 import java.io.File;
 import java.io.FileNotFoundException;
 
-abstract class AbstractIngredient {
+interface Get{
+    String getName();
+    double getPrice();
+}
+
+interface Set{
+    void setName(String name);
+    void setPrice(double price);
+}
+
+abstract class AbstractComponent implements Get,Set{
     private String name;
     private double price;
 
-    AbstractIngredient(String name, double price) {
+    AbstractComponent(String name, double price) {
         this.name = name;
         this.price = price;
     }
 
-    double getPrice() {
+    public double getPrice() {
         return price;
     }
 
-    String getName() {
+    public String getName() {
         return name;
     }
 
-    void setName(String name) {
+    public void setName(String name) {
         this.name = name;
     }
 
-    void setPrice(double price) {
+    public void setPrice(double price) {
         this.price = price;
     }
 }
 
-class Ingredient extends AbstractIngredient {
+class Ingredient extends AbstractComponent {
 
     Ingredient(String name, double price) {
         super(name, price);
@@ -42,7 +51,7 @@ class Ingredient extends AbstractIngredient {
 
 }
 
-class PizzaBase extends AbstractIngredient {
+class PizzaBase extends AbstractComponent {
 
     PizzaBase(String name, double price) {
         super(name, price);
@@ -53,8 +62,7 @@ class PizzaBase extends AbstractIngredient {
     }
 }
 
-class Pizza {
-
+class Pizza implements Get {
     private String name;
     private double price;
 
@@ -70,18 +78,18 @@ class Pizza {
     }
 
     private void priceUpdate() {
-        this.price = pizzaBase.getPrice();
+        price = pizzaBase.getPrice();
 
         for (Ingredient i : ingredients) {
             price += i.getPrice();
         }
     }
 
-    double getPrice() {
+    public double getPrice() {
         return price;
     }
 
-    String getName() {
+    public String getName() {
         return name;
     }
 
@@ -89,22 +97,28 @@ class Pizza {
         name = newName;
     }
 
-    void setIngredients(Ingredient... newIngredients) {
-        ingredients = new LinkedList<>(Arrays.asList(newIngredients));
+    void setIngredients(LinkedList<Ingredient> newIngredients) {
+        ingredients = newIngredients;
         priceUpdate();
     }
 
     void setPizzaBase(PizzaBase newPizzaBase) {
         pizzaBase = newPizzaBase;
+        priceUpdate();
     }
 }
 
 
 class Menu {
-    private LinkedList<Ingredient> pizzaIngredients = new LinkedList<>();
-    private LinkedList<PizzaBase> pizzaBases = new LinkedList<>();
+    private LinkedList<Ingredient> pizzaIngredients;
+    private LinkedList<PizzaBase> pizzaBases;
+    private LinkedList<Pizza> pizza;
 
     Menu(String ingredientsFile, String basesFile) {
+        pizza = new LinkedList<>();
+        pizzaBases = new LinkedList<>();
+        pizzaIngredients = new LinkedList<>();
+
         readIngredientsFromFile(ingredientsFile, basesFile);
     }
 
@@ -130,7 +144,7 @@ class Menu {
         }
     }
 
-    private <T extends AbstractIngredient> LinkedList<T> searchInMenu(LinkedList<T>listIngredients,String... ingredientsName){
+    private <T extends Get> LinkedList<T> searchInMenu(LinkedList<T> listIngredients, String... ingredientsName) {
         LinkedList<T> ingredients = new LinkedList<>();
 
         for (String i : ingredientsName) {
@@ -142,7 +156,7 @@ class Menu {
                     break;
                 }
             }
-            if (!flag){
+            if (!flag) {
                 throw new IllegalArgumentException();
             }
         }
@@ -155,7 +169,7 @@ class Menu {
     }
 
     LinkedList<Ingredient> getIngredients(String... ingredientsName) {
-        return searchInMenu(pizzaIngredients,ingredientsName);
+        return searchInMenu(pizzaIngredients, ingredientsName);
     }
 
 
@@ -163,20 +177,41 @@ class Menu {
         return pizzaBases;
     }
 
-    PizzaBase getBases(String basesName){
-        return searchInMenu(pizzaBases,basesName).getFirst();
+    PizzaBase getBases(String basesName) {
+        return searchInMenu(pizzaBases, basesName).getFirst();
     }
 
-    void changeIngredient(String name,String newName,double newPrice){
-        Ingredient ingredient = searchInMenu(pizzaIngredients,name).getFirst();
+    LinkedList<Pizza> getPizza(){
+        return pizza;
+    }
+
+    <T extends AbstractComponent> void changeComponent(String name, String newName, double newPrice,LinkedList<T> pizzaIngredients) {
+        T ingredient = searchInMenu(pizzaIngredients, name).getFirst();
         ingredient.setName(newName);
         ingredient.setPrice(newPrice);
     }
 
-    void changeBase(String name, String newName,double newPrice){
-        PizzaBase base = searchInMenu(pizzaBases,name).getFirst();
-        base.setName(newName);
-        base.setPrice(newPrice);
+    void changePizza(String name,String newName,LinkedList<Ingredient>newIngredients,PizzaBase newBase) {
+            Pizza changePizza = searchInMenu(pizza, name).getFirst();
+            changePizza.setName(newName);
+            changePizza.setPizzaBase(newBase);
+            changePizza.setIngredients(newIngredients);
+    }
+
+    void addIngredient(String name, double price) {
+        pizzaIngredients.add(new Ingredient(name, price));
+    }
+
+    void addBase(String name, double price) {
+        pizzaBases.add(new PizzaBase(name, price));
+    }
+
+    void addPizza(String name, PizzaBase base, LinkedList<Ingredient> ingredients) {
+        pizza.add(new Pizza(name,base,ingredients));
+    }
+
+    <T extends Get> void deleteComponent(String name,LinkedList<T> components){
+        components.remove(searchInMenu(components,name).getFirst());
     }
 
 }
@@ -185,7 +220,7 @@ class PizzaConstructor {
     private String ingredientsFile;
     private String basesFile;
 
-    private Menu menu;
+    Menu menu;
 
     PizzaConstructor(String ingredientsFile, String basesFile) {
         this.basesFile = basesFile;
@@ -193,8 +228,8 @@ class PizzaConstructor {
         this.menu = new Menu(ingredientsFile, basesFile);
     }
 
-    Pizza createPizza(String pizzaName,String pizzaBaseName, String... ingredientsName) {
-        return new Pizza(pizzaName,menu.getBases(pizzaBaseName),menu.getIngredients(ingredientsName));
+    Pizza createPizza(String pizzaName, String pizzaBaseName, String... ingredientsName) {
+        return new Pizza(pizzaName, menu.getBases(pizzaBaseName), menu.getIngredients(ingredientsName));
     }
 
 }
@@ -202,6 +237,6 @@ class PizzaConstructor {
 
 class Main {
     public static void main(String[] args) {
-        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt","C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
+        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt", "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
     }
 }
