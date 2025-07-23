@@ -3,17 +3,17 @@ import java.util.Scanner;
 import java.io.File;
 import java.io.FileNotFoundException;
 
-interface Get{
+interface Get {
     String getName();
     double getPrice();
 }
 
-interface Set{
+interface Set {
     void setName(String name);
     void setPrice(double price);
 }
 
-abstract class AbstractComponent implements Get,Set{
+abstract class AbstractComponent implements Get, Set {
     private String name;
     private double price;
 
@@ -122,6 +122,17 @@ class Menu {
         readIngredientsFromFile(ingredientsFile, basesFile);
     }
 
+
+    private boolean checkBases(PizzaBase classic) {
+        double price = classic.getPrice();
+        for (PizzaBase i : pizzaBases) {
+            if ((100 * i.getPrice() / price) > 120.0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     void readIngredientsFromFile(String ingredientsFile, String basesFile) {
         try {
 
@@ -132,17 +143,31 @@ class Menu {
             }
             scanner.close();
 
-
+            PizzaBase classic = null;
             scanner = new Scanner(new File(basesFile));
             while (scanner.hasNextLine()) {
-                pizzaBases.add(new PizzaBase(scanner.nextLine().split(" ")));
+                PizzaBase newBase = new PizzaBase(scanner.nextLine().split(" "));
+
+                if (newBase.getName().equals("Классическое")) {
+                    classic = newBase;
+                }
+                pizzaBases.add(newBase);
+            }
+
+            if (classic == null || !checkBases(classic)) {
+                throw new IllegalArgumentException();
             }
             scanner.close();
 
+
         } catch (FileNotFoundException exc) {
             System.err.println("Ошибка чтения файла");
+        } catch (IllegalArgumentException exc) {
+            pizzaBases = null;
+            System.err.println("Ошибка содержимого файла");
         }
     }
+
 
     private <T extends Get> LinkedList<T> searchInMenu(LinkedList<T> listIngredients, String... ingredientsName) {
         LinkedList<T> ingredients = new LinkedList<>();
@@ -181,21 +206,25 @@ class Menu {
         return searchInMenu(pizzaBases, basesName).getFirst();
     }
 
-    LinkedList<Pizza> getPizza(){
+    LinkedList<Pizza> getPizza() {
         return pizza;
     }
 
-    <T extends AbstractComponent> void changeComponent(String name, String newName, double newPrice,LinkedList<T> pizzaIngredients) {
+    Pizza getPizza(String pizzaName) {
+        return searchInMenu(pizza, pizzaName).getFirst();
+    }
+
+    <T extends AbstractComponent> void change(String name, String newName, double newPrice, LinkedList<T> pizzaIngredients) {
         T ingredient = searchInMenu(pizzaIngredients, name).getFirst();
         ingredient.setName(newName);
         ingredient.setPrice(newPrice);
     }
 
-    void changePizza(String name,String newName,LinkedList<Ingredient>newIngredients,PizzaBase newBase) {
-            Pizza changePizza = searchInMenu(pizza, name).getFirst();
-            changePizza.setName(newName);
-            changePizza.setPizzaBase(newBase);
-            changePizza.setIngredients(newIngredients);
+    void change(String name, String newName, LinkedList<Ingredient> newIngredients, PizzaBase newBase) {
+        Pizza changePizza = searchInMenu(pizza, name).getFirst();
+        changePizza.setName(newName);
+        changePizza.setPizzaBase(newBase);
+        changePizza.setIngredients(newIngredients);
     }
 
     void addIngredient(String name, double price) {
@@ -207,11 +236,21 @@ class Menu {
     }
 
     void addPizza(String name, PizzaBase base, LinkedList<Ingredient> ingredients) {
-        pizza.add(new Pizza(name,base,ingredients));
+        pizza.add(new Pizza(name, base, ingredients));
     }
 
-    <T extends Get> void deleteComponent(String name,LinkedList<T> components){
-        components.remove(searchInMenu(components,name).getFirst());
+    void addPizza(Pizza pizza){
+        this.pizza.add(pizza);
+    }
+
+    <T extends Get> void delete(String name, LinkedList<T> components) {
+        components.remove(searchInMenu(components, name).getFirst());
+    }
+
+    <T extends Get> void print(LinkedList<T> componentList) {
+        for (T i : componentList) {
+            System.out.println(i.getName() + " " + i.getPrice());
+        }
     }
 
 }
@@ -231,12 +270,12 @@ class PizzaConstructor {
     Pizza createPizza(String pizzaName, String pizzaBaseName, String... ingredientsName) {
         return new Pizza(pizzaName, menu.getBases(pizzaBaseName), menu.getIngredients(ingredientsName));
     }
-
 }
 
 
 class Main {
     public static void main(String[] args) {
         PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt", "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
+
     }
 }
