@@ -1,3 +1,4 @@
+import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.Scanner;
 import java.io.File;
@@ -5,11 +6,13 @@ import java.io.FileNotFoundException;
 
 interface Get {
     String getName();
+
     double getPrice();
 }
 
 interface Set {
     void setName(String name);
+
     void setPrice(double price);
 }
 
@@ -48,7 +51,6 @@ class Ingredient extends AbstractComponent {
     Ingredient(String[] stringValues) {
         super(stringValues[0], Double.parseDouble(stringValues[1]));
     }
-
 }
 
 class PizzaBase extends AbstractComponent {
@@ -62,18 +64,42 @@ class PizzaBase extends AbstractComponent {
     }
 }
 
+class PizzaSides extends AbstractComponent {
+    private LinkedList<String> listOfPizzasUsed;
+
+    PizzaSides(String name, double price, LinkedList<String> pizzaName) {
+        super(name, price);
+        listOfPizzasUsed = pizzaName;
+    }
+
+    PizzaSides(String[] stringValues) {
+        super(stringValues[0], Double.parseDouble(stringValues[1]));
+        listOfPizzasUsed = new LinkedList<>(Arrays.asList(stringValues).subList(2, stringValues.length));
+    }
+
+    LinkedList<String> getListOfPizzasUsed() {
+        return listOfPizzasUsed;
+    }
+
+    void setListOfPizzasUsed(LinkedList<String> newPizzaSides) {
+        listOfPizzasUsed = newPizzaSides;
+    }
+}
+
 class Pizza implements Get {
     private String name;
     private double price;
 
+    private PizzaSides sides;
     private LinkedList<Ingredient> ingredients;
     private PizzaBase pizzaBase;
 
-    Pizza(String name, PizzaBase pizzabase, LinkedList<Ingredient> ingredients) {
+    Pizza(String name, PizzaBase pizzabase, LinkedList<Ingredient> ingredients, PizzaSides sides) {
         this.name = name;
         this.pizzaBase = pizzabase;
-
         this.ingredients = ingredients;
+        this.sides = sides;
+
         priceUpdate();
     }
 
@@ -83,6 +109,7 @@ class Pizza implements Get {
         for (Ingredient i : ingredients) {
             price += i.getPrice();
         }
+        price += sides.getPrice();
     }
 
     public double getPrice() {
@@ -106,6 +133,11 @@ class Pizza implements Get {
         pizzaBase = newPizzaBase;
         priceUpdate();
     }
+
+    void setSides(PizzaSides newSides) {
+        sides = newSides;
+        priceUpdate();
+    }
 }
 
 
@@ -113,11 +145,13 @@ class Menu {
     private LinkedList<Ingredient> pizzaIngredients;
     private LinkedList<PizzaBase> pizzaBases;
     private LinkedList<Pizza> pizza;
+    private LinkedList<PizzaSides> sides;
 
     Menu(String ingredientsFile, String basesFile) {
         pizza = new LinkedList<>();
         pizzaBases = new LinkedList<>();
         pizzaIngredients = new LinkedList<>();
+        sides = new LinkedList<>();
 
         readIngredientsFromFile(ingredientsFile, basesFile);
     }
@@ -139,7 +173,10 @@ class Menu {
             Scanner scanner = new Scanner(new File(ingredientsFile));
 
             while (scanner.hasNextLine()) {
-                pizzaIngredients.add(new Ingredient(scanner.nextLine().split(" ")));
+                String[] newStrings = scanner.nextLine().split(" ");
+                pizzaIngredients.add(new Ingredient(newStrings));
+                sides.add(new PizzaSides(newStrings));
+
             }
             scanner.close();
 
@@ -158,7 +195,6 @@ class Menu {
                 throw new IllegalArgumentException();
             }
             scanner.close();
-
 
         } catch (FileNotFoundException exc) {
             System.err.println("Ошибка чтения файла");
@@ -206,6 +242,14 @@ class Menu {
         return searchInMenu(pizzaBases, basesName).getFirst();
     }
 
+    LinkedList<PizzaSides> getSides() {
+        return sides;
+    }
+
+    PizzaSides getSides(String sidesName) {
+        return searchInMenu(sides, sidesName).getFirst();
+    }
+
     LinkedList<Pizza> getPizza() {
         return pizza;
     }
@@ -220,11 +264,22 @@ class Menu {
         ingredient.setPrice(newPrice);
     }
 
+    void change(String name, String newName, double newPrice, LinkedList<PizzaSides> pizzaIngredients, LinkedList<String> newListOfPizzasUsed) {
+        PizzaSides pizzaSides = searchInMenu(pizzaIngredients, name).getFirst();
+        pizzaSides.setName(newName);
+        pizzaSides.setPrice(newPrice);
+        pizzaSides.setListOfPizzasUsed(newListOfPizzasUsed);
+    }
+
     void change(String name, String newName, LinkedList<Ingredient> newIngredients, PizzaBase newBase) {
         Pizza changePizza = searchInMenu(pizza, name).getFirst();
         changePizza.setName(newName);
         changePizza.setPizzaBase(newBase);
         changePizza.setIngredients(newIngredients);
+    }
+
+    void addPizzaSides(String name, double price, LinkedList<String> pizzaSides) {
+        sides.add(new PizzaSides(name, price, pizzaSides));
     }
 
     void addIngredient(String name, double price) {
@@ -235,11 +290,11 @@ class Menu {
         pizzaBases.add(new PizzaBase(name, price));
     }
 
-    void addPizza(String name, PizzaBase base, LinkedList<Ingredient> ingredients) {
-        pizza.add(new Pizza(name, base, ingredients));
+    void addPizza(String name, PizzaBase base, LinkedList<Ingredient> ingredients, PizzaSides sides) {
+        pizza.add(new Pizza(name, base, ingredients, sides));
     }
 
-    void addPizza(Pizza pizza){
+    void addPizza(Pizza pizza) {
         this.pizza.add(pizza);
     }
 
@@ -267,8 +322,8 @@ class PizzaConstructor {
         this.menu = new Menu(ingredientsFile, basesFile);
     }
 
-    Pizza createPizza(String pizzaName, String pizzaBaseName, String... ingredientsName) {
-        return new Pizza(pizzaName, menu.getBases(pizzaBaseName), menu.getIngredients(ingredientsName));
+    Pizza createPizza(String pizzaName, String pizzaBaseName, String sidesName, String... ingredientsName) {
+        return new Pizza(pizzaName, menu.getBases(pizzaBaseName), menu.getIngredients(ingredientsName), menu.getSides(sidesName));
     }
 }
 
