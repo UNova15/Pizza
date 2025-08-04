@@ -1,8 +1,9 @@
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.Scanner;
+package BasicLogic;
+
+import java.util.*;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.time.LocalDate;
 
 interface Get {
     String getName();
@@ -15,6 +16,7 @@ interface Set {
 
     void setPrice(double price);
 }
+
 
 abstract class AbstractComponent implements Get, Set {
     private String name;
@@ -86,19 +88,57 @@ class PizzaSides extends AbstractComponent {
     }
 }
 
+class PieceOfPizza {
+    private double price;
+    private PizzaSides sides;
+    private LinkedList<Ingredient> ingredients;
+
+    PieceOfPizza(PizzaSides sides, LinkedList<Ingredient> ingredients) {
+        this.sides = sides;
+        this.ingredients = ingredients;
+        updatePrice();
+    }
+
+    private void updatePrice() {
+        price = sides.getPrice();
+
+        for (Ingredient i : ingredients) {
+            price += i.getPrice();
+        }
+    }
+
+    double getPrice() {
+        return price;
+    }
+
+    void setIngredients(LinkedList<Ingredient> newIngredients) {
+        ingredients = newIngredients;
+        updatePrice();
+    }
+
+    void setSides(PizzaSides newSides) {
+        sides = newSides;
+        updatePrice();
+    }
+
+    void doublingIngredients(){
+        ingredients.addAll(ingredients);
+        updatePrice();
+    }
+}
+
+
 class Pizza implements Get {
     private String name;
     private double price;
 
-    private PizzaSides sides;
-    private LinkedList<Ingredient> ingredients;
     private PizzaBase pizzaBase;
+    private PieceOfPizza[] pieces;
 
-    Pizza(String name, PizzaBase pizzabase, LinkedList<Ingredient> ingredients, PizzaSides sides) {
+    Pizza(String name, PizzaBase pizzaBase, PieceOfPizza[] pieces) {
         this.name = name;
-        this.pizzaBase = pizzabase;
-        this.ingredients = ingredients;
-        this.sides = sides;
+        this.pizzaBase = pizzaBase;
+        this.pieces = pieces;
 
         priceUpdate();
     }
@@ -106,10 +146,9 @@ class Pizza implements Get {
     private void priceUpdate() {
         price = pizzaBase.getPrice();
 
-        for (Ingredient i : ingredients) {
+        for (PieceOfPizza i : pieces) {
             price += i.getPrice();
         }
-        price += sides.getPrice();
     }
 
     public double getPrice() {
@@ -120,12 +159,16 @@ class Pizza implements Get {
         return name;
     }
 
+    PieceOfPizza [] getPieces(){
+        return pieces;
+    }
+
     void setName(String newName) {
         name = newName;
     }
 
-    void setIngredients(LinkedList<Ingredient> newIngredients) {
-        ingredients = newIngredients;
+    void setIngredients(int position, LinkedList<Ingredient> newIngredients) {
+        pieces[position].setIngredients(newIngredients);
         priceUpdate();
     }
 
@@ -134,9 +177,22 @@ class Pizza implements Get {
         priceUpdate();
     }
 
-    void setSides(PizzaSides newSides) {
-        sides = newSides;
+    void setSides(int position, PizzaSides newSides) {
+        pieces[position].setSides(newSides);
         priceUpdate();
+    }
+
+    void setNumberOfPieces(int numberOfPieces) {
+        int oldSize = pieces.length;
+        pieces = Arrays.copyOf(pieces, numberOfPieces);
+
+        for (int i = oldSize; i < numberOfPieces; i++) {
+            pieces[i] = pieces[oldSize - 1];
+        }
+    }
+
+    void setNumberOfPieces(PieceOfPizza[] newPieces) {
+        pieces = newPieces;
     }
 }
 
@@ -205,7 +261,7 @@ class Menu {
     }
 
 
-    private <T extends Get> LinkedList<T> searchInMenu(LinkedList<T> listIngredients, String... ingredientsName) {
+    <T extends Get> LinkedList<T> searchInMenu(LinkedList<T> listIngredients, String... ingredientsName) {
         LinkedList<T> ingredients = new LinkedList<>();
 
         for (String i : ingredientsName) {
@@ -271,11 +327,11 @@ class Menu {
         pizzaSides.setListOfPizzasUsed(newListOfPizzasUsed);
     }
 
-    void change(String name, String newName, LinkedList<Ingredient> newIngredients, PizzaBase newBase) {
+    void change(String name, int position, String newName, LinkedList<Ingredient> newIngredients, PizzaBase newBase) {
         Pizza changePizza = searchInMenu(pizza, name).getFirst();
         changePizza.setName(newName);
         changePizza.setPizzaBase(newBase);
-        changePizza.setIngredients(newIngredients);
+        changePizza.setIngredients(position, newIngredients);
     }
 
     void addPizzaSides(String name, double price, LinkedList<String> pizzaSides) {
@@ -290,10 +346,6 @@ class Menu {
         pizzaBases.add(new PizzaBase(name, price));
     }
 
-    void addPizza(String name, PizzaBase base, LinkedList<Ingredient> ingredients, PizzaSides sides) {
-        pizza.add(new Pizza(name, base, ingredients, sides));
-    }
-
     void addPizza(Pizza pizza) {
         this.pizza.add(pizza);
     }
@@ -304,8 +356,43 @@ class Menu {
 
     <T extends Get> void print(LinkedList<T> componentList) {
         for (T i : componentList) {
-            System.out.println(i.getName() + " " + i.getPrice());
+            System.out.println(i.getName() + "\t" + i.getPrice());
         }
+    }
+
+}
+
+class Order implements Get {
+    private double price;
+    private UUID orderNumber;
+    private LinkedList<Pizza> pizza;
+    private String comments;
+    private LocalDate date;
+    private LocalDate postponedDate;
+
+    Order(LinkedList<Pizza> newPizza, String comments, Optional<LocalDate> postponedDate) {
+        this.pizza = newPizza;
+        this.comments = comments;
+        this.date = LocalDate.now();
+        this.orderNumber = UUID.randomUUID();
+        this.price = getPrice();
+
+        if (postponedDate.isPresent()) {
+            this.postponedDate = postponedDate.get();
+        }
+    }
+
+    public double getPrice() {
+        double price = 0;
+
+        for (Pizza i : pizza) {
+            price += i.getPrice();
+        }
+        return price;
+    }
+
+    public String getName() {
+        return orderNumber.toString();
     }
 
 }
@@ -313,17 +400,52 @@ class Menu {
 class PizzaConstructor {
     private String ingredientsFile;
     private String basesFile;
+    private LinkedList<Order> savedOrder;
 
     Menu menu;
 
     PizzaConstructor(String ingredientsFile, String basesFile) {
         this.basesFile = basesFile;
         this.ingredientsFile = ingredientsFile;
+
+        this.savedOrder = new LinkedList<>();
         this.menu = new Menu(ingredientsFile, basesFile);
     }
 
-    Pizza createPizza(String pizzaName, String pizzaBaseName, String sidesName, String... ingredientsName) {
-        return new Pizza(pizzaName, menu.getBases(pizzaBaseName), menu.getIngredients(ingredientsName), menu.getSides(sidesName));
+
+    LinkedList<Pizza> createNewPizza(boolean doubled, int numberOfPieces, String... pizzaName) {
+        LinkedList<Pizza> newPizza = menu.searchInMenu(menu.getPizza(), pizzaName);
+
+        for (Pizza pizza : newPizza) {
+            pizza.setNumberOfPieces(numberOfPieces);
+
+            if(doubled){
+                for(PieceOfPizza pieces:pizza.getPieces()){
+                    pieces.doublingIngredients();
+                }
+            }
+        }
+
+        return newPizza;
+    }
+
+    Pizza createNewPizza(String namePizza, String pizzaBase, String[] pizzaSides, String[][] ingredients) {
+        LinkedList<PieceOfPizza> newPieces = new LinkedList<>();
+
+        PizzaBase base = menu.getBases(pizzaBase);
+        LinkedList<PizzaSides> sides = menu.searchInMenu(menu.getSides(), pizzaSides);
+        for (int i = 0; i < ingredients.length; i++) {
+            LinkedList<Ingredient> newIngredients = menu.searchInMenu(menu.getIngredients(), ingredients[i]);
+            newPieces.add(new PieceOfPizza(sides.poll(), newIngredients));
+        }
+
+        return new Pizza(namePizza, base, newPieces.toArray(new PieceOfPizza[pizzaSides.length]));
+    }
+
+    Order createOrder(LinkedList<Pizza> pizza, String comments, Optional<LocalDate> date) {
+        Order newOrder = new Order(pizza, comments, date);
+        savedOrder.add(newOrder);
+        return newOrder;
     }
 }
 
