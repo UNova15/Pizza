@@ -4,6 +4,7 @@ import java.util.*;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.time.LocalDate;
+import java.util.function.Function;
 
 interface Get {
     String getName();
@@ -27,18 +28,33 @@ abstract class AbstractComponent implements Get, Set {
         this.price = price;
     }
 
+    @Override
+    public boolean equals(Object newObject) {
+        if (this == newObject) {
+            return true;
+        }
+        if (newObject instanceof Get) {
+            return this.name.equals(((Get) newObject).getName());
+        }
+        return false;
+    }
+
+    @Override
     public double getPrice() {
         return price;
     }
 
+    @Override
     public String getName() {
         return name;
     }
 
+    @Override
     public void setName(String name) {
         this.name = name;
     }
 
+    @Override
     public void setPrice(double price) {
         this.price = price;
     }
@@ -76,6 +92,9 @@ class PizzaSides extends AbstractComponent {
 
     PizzaSides(String[] stringValues) {
         super(stringValues[0], Double.parseDouble(stringValues[1]));
+
+        if (stringValues.length < 3) throw new IllegalArgumentException();
+
         listOfPizzasUsed = new LinkedList<>(Arrays.asList(stringValues).subList(2, stringValues.length));
     }
 
@@ -111,6 +130,10 @@ class PieceOfPizza {
         return price;
     }
 
+    PizzaSides getSides() {
+        return sides;
+    }
+
     void setIngredients(LinkedList<Ingredient> newIngredients) {
         ingredients = newIngredients;
         updatePrice();
@@ -121,7 +144,7 @@ class PieceOfPizza {
         updatePrice();
     }
 
-    void doublingIngredients(){
+    void doublingIngredients() {
         ingredients.addAll(ingredients);
         updatePrice();
     }
@@ -140,7 +163,16 @@ class Pizza implements Get {
         this.pizzaBase = pizzaBase;
         this.pieces = pieces;
 
+        checkSides(pieces);
         priceUpdate();
+    }
+
+    private void checkSides(PieceOfPizza[] pieces) {
+        for (PieceOfPizza piece : pieces) {
+            if (!piece.getSides().getListOfPizzasUsed().contains(name)) {
+                throw new IllegalArgumentException();
+            }
+        }
     }
 
     private void priceUpdate() {
@@ -159,8 +191,12 @@ class Pizza implements Get {
         return name;
     }
 
-    PieceOfPizza [] getPieces(){
+    PieceOfPizza[] getPieces() {
         return pieces;
+    }
+
+    PizzaBase getBase() {
+        return pizzaBase;
     }
 
     void setName(String newName) {
@@ -183,6 +219,8 @@ class Pizza implements Get {
     }
 
     void setNumberOfPieces(int numberOfPieces) {
+        if (numberOfPieces <= 0) throw new IllegalArgumentException();
+
         int oldSize = pieces.length;
         pieces = Arrays.copyOf(pieces, numberOfPieces);
 
@@ -191,8 +229,44 @@ class Pizza implements Get {
         }
     }
 
-    void setNumberOfPieces(PieceOfPizza[] newPieces) {
-        pieces = newPieces;
+    //TO DO заменить на копирование с помощью метода
+    void setPieces(int startPosition, int endPosition, PieceOfPizza[] pieces) {
+        for (int i = startPosition; i < endPosition; i++) {
+            this.pieces[i] = pieces[i - startPosition];
+        }
+    }
+}
+
+class FileLoader {
+    static void loadMenuData(String ingredientsFile,String baseFile,String sidesFile,LinkedList<Ingredient> pizzaIngredients,
+     LinkedList<PizzaBase> pizzaBases,
+     LinkedList<PizzaSides> pizzaSides){
+        readItem(ingredientsFile,pizzaIngredients,Ingredient::new);
+        readItem(baseFile,pizzaBases,PizzaBase::new);
+        readItem(sidesFile,pizzaSides,PizzaSides::new);
+
+        checkBases(pizzaBases);
+    }
+
+    private static <T> void readItem(String fileName, LinkedList<T> list, Function<String[], T> creator) {
+        try (Scanner scanner = new Scanner(new File(fileName))) {
+
+            while (scanner.hasNextLine()) {
+                String[] data = scanner.nextLine().split(" ");
+                list.add(creator.apply(data));
+            }
+
+        } catch (FileNotFoundException exc) {
+            System.err.println("Ошибка открытия файла");
+        }
+    }
+
+    private static void checkBases(LinkedList<PizzaBase> pizzaBases) {
+        PizzaBase classic = pizzaBases.stream().filter(b -> "Классическое".equals(b.getName())).findFirst().orElseThrow(IllegalArgumentException::new);
+
+        if(pizzaBases.stream().anyMatch(b->b.getPrice()>classic.getPrice()*1.2)){
+            throw new IllegalArgumentException();
+        }
     }
 }
 
@@ -201,63 +275,15 @@ class Menu {
     private LinkedList<Ingredient> pizzaIngredients;
     private LinkedList<PizzaBase> pizzaBases;
     private LinkedList<Pizza> pizza;
-    private LinkedList<PizzaSides> sides;
+    private LinkedList<PizzaSides> pizzaSides;
 
-    Menu(String ingredientsFile, String basesFile) {
+    Menu(String ingredientsFile, String basesFile,String sidesFile) {
         pizza = new LinkedList<>();
         pizzaBases = new LinkedList<>();
         pizzaIngredients = new LinkedList<>();
-        sides = new LinkedList<>();
+        pizzaSides = new LinkedList<>();
 
-        readIngredientsFromFile(ingredientsFile, basesFile);
-    }
-
-
-    private boolean checkBases(PizzaBase classic) {
-        double price = classic.getPrice();
-        for (PizzaBase i : pizzaBases) {
-            if ((100 * i.getPrice() / price) > 120.0) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    void readIngredientsFromFile(String ingredientsFile, String basesFile) {
-        try {
-
-            Scanner scanner = new Scanner(new File(ingredientsFile));
-
-            while (scanner.hasNextLine()) {
-                String[] newStrings = scanner.nextLine().split(" ");
-                pizzaIngredients.add(new Ingredient(newStrings));
-                sides.add(new PizzaSides(newStrings));
-
-            }
-            scanner.close();
-
-            PizzaBase classic = null;
-            scanner = new Scanner(new File(basesFile));
-            while (scanner.hasNextLine()) {
-                PizzaBase newBase = new PizzaBase(scanner.nextLine().split(" "));
-
-                if (newBase.getName().equals("Классическое")) {
-                    classic = newBase;
-                }
-                pizzaBases.add(newBase);
-            }
-
-            if (classic == null || !checkBases(classic)) {
-                throw new IllegalArgumentException();
-            }
-            scanner.close();
-
-        } catch (FileNotFoundException exc) {
-            System.err.println("Ошибка чтения файла");
-        } catch (IllegalArgumentException exc) {
-            pizzaBases = null;
-            System.err.println("Ошибка содержимого файла");
-        }
+        FileLoader.loadMenuData(ingredientsFile,basesFile,sidesFile,pizzaIngredients,pizzaBases,pizzaSides);
     }
 
 
@@ -299,11 +325,11 @@ class Menu {
     }
 
     LinkedList<PizzaSides> getSides() {
-        return sides;
+        return pizzaSides;
     }
 
     PizzaSides getSides(String sidesName) {
-        return searchInMenu(sides, sidesName).getFirst();
+        return searchInMenu(pizzaSides, sidesName).getFirst();
     }
 
     LinkedList<Pizza> getPizza() {
@@ -335,7 +361,7 @@ class Menu {
     }
 
     void addPizzaSides(String name, double price, LinkedList<String> pizzaSides) {
-        sides.add(new PizzaSides(name, price, pizzaSides));
+        this.pizzaSides.add(new PizzaSides(name, price, pizzaSides));
     }
 
     void addIngredient(String name, double price) {
@@ -413,14 +439,15 @@ class PizzaConstructor {
     }
 
 
-    LinkedList<Pizza> createNewPizza(boolean doubled, int numberOfPieces, String... pizzaName) {
+    //создание пиццы из списка пицц
+    LinkedList<Pizza> createNewPizza(int numberOfPieces, boolean doubled, String... pizzaName) {
         LinkedList<Pizza> newPizza = menu.searchInMenu(menu.getPizza(), pizzaName);
 
         for (Pizza pizza : newPizza) {
             pizza.setNumberOfPieces(numberOfPieces);
 
-            if(doubled){
-                for(PieceOfPizza pieces:pizza.getPieces()){
+            if (doubled) {
+                for (PieceOfPizza pieces : pizza.getPieces()) {
                     pieces.doublingIngredients();
                 }
             }
@@ -429,6 +456,27 @@ class PizzaConstructor {
         return newPizza;
     }
 
+    //создание пиццы из n-пиц
+    Pizza createNewPizza(int numberOfPieces, String... pizzaName) {
+        LinkedList<Pizza> pizzas = menu.searchInMenu(menu.getPizza(), pizzaName);
+        Pizza newPizza = pizzas.getFirst();
+
+        for (Pizza pizza : pizzas) {
+            if (!(newPizza.getBase().equals(pizza.getBase()))) {
+                throw new IllegalArgumentException();
+            }
+        }
+        newPizza.setNumberOfPieces(numberOfPieces);
+
+        int partSize = newPizza.getPieces().length / pizzaName.length;
+
+        for (int i = 0; i < newPizza.getPieces().length; i += partSize) {
+            newPizza.setPieces(i, i + partSize, pizzas.get(i / partSize).getPieces());
+        }
+        return newPizza;
+    }
+
+    //создание собственной пиццы
     Pizza createNewPizza(String namePizza, String pizzaBase, String[] pizzaSides, String[][] ingredients) {
         LinkedList<PieceOfPizza> newPieces = new LinkedList<>();
 
@@ -450,7 +498,7 @@ class PizzaConstructor {
 }
 
 
-class Main {
+class Constructor {
     public static void main(String[] args) {
         PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt", "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
 
