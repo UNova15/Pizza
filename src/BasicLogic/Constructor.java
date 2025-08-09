@@ -4,7 +4,10 @@ import java.util.*;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.time.LocalDate;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 interface Get {
     String getName();
@@ -18,6 +21,9 @@ interface Set {
     void setPrice(double price);
 }
 
+interface ComponentUpdater {
+    <T> void update(T component);
+}
 
 abstract class AbstractComponent implements Get, Set {
     private String name;
@@ -126,6 +132,10 @@ class PieceOfPizza {
         }
     }
 
+    LinkedList<Ingredient> getIngredients(){
+        return ingredients;
+    }
+
     double getPrice() {
         return price;
     }
@@ -144,10 +154,11 @@ class PieceOfPizza {
         updatePrice();
     }
 
-    void doublingIngredients() {
-        ingredients.addAll(ingredients);
-        updatePrice();
+    void doubleIngredients(){
+        LinkedList<Ingredient> copy = new LinkedList<>(ingredients);
+        ingredients.addAll(copy);
     }
+
 }
 
 
@@ -163,7 +174,7 @@ class Pizza implements Get {
         this.pizzaBase = pizzaBase;
         this.pieces = pieces;
 
-        checkSides(pieces);
+        checkSides(this.pieces);
         priceUpdate();
     }
 
@@ -229,21 +240,18 @@ class Pizza implements Get {
         }
     }
 
-    //TO DO заменить на копирование с помощью метода
-    void setPieces(int startPosition, int endPosition, PieceOfPizza[] pieces) {
-        for (int i = startPosition; i < endPosition; i++) {
-            this.pieces[i] = pieces[i - startPosition];
-        }
+    void setPieces(int position, PieceOfPizza pieces) {
+        this.pieces[position] = pieces;
     }
 }
 
 class FileLoader {
-    static void loadMenuData(String ingredientsFile,String baseFile,String sidesFile,LinkedList<Ingredient> pizzaIngredients,
-     LinkedList<PizzaBase> pizzaBases,
-     LinkedList<PizzaSides> pizzaSides){
-        readItem(ingredientsFile,pizzaIngredients,Ingredient::new);
-        readItem(baseFile,pizzaBases,PizzaBase::new);
-        readItem(sidesFile,pizzaSides,PizzaSides::new);
+    static void loadMenuData(String ingredientsFile, String baseFile, String sidesFile, LinkedList<Ingredient> pizzaIngredients,
+                             LinkedList<PizzaBase> pizzaBases,
+                             LinkedList<PizzaSides> pizzaSides) {
+        readItem(ingredientsFile, pizzaIngredients, Ingredient::new);
+        readItem(baseFile, pizzaBases, PizzaBase::new);
+        readItem(sidesFile, pizzaSides, PizzaSides::new);
 
         checkBases(pizzaBases);
     }
@@ -262,9 +270,11 @@ class FileLoader {
     }
 
     private static void checkBases(LinkedList<PizzaBase> pizzaBases) {
-        PizzaBase classic = pizzaBases.stream().filter(b -> "Классическое".equals(b.getName())).findFirst().orElseThrow(IllegalArgumentException::new);
+        PizzaBase classic = pizzaBases.stream().filter(b -> "Классическое".equals(b.getName()))
+                .findFirst().
+                orElseThrow(IllegalArgumentException::new);
 
-        if(pizzaBases.stream().anyMatch(b->b.getPrice()>classic.getPrice()*1.2)){
+        if (pizzaBases.stream().anyMatch(b -> b.getPrice() > classic.getPrice() * 1.2)) {
             throw new IllegalArgumentException();
         }
     }
@@ -277,34 +287,24 @@ class Menu {
     private LinkedList<Pizza> pizza;
     private LinkedList<PizzaSides> pizzaSides;
 
-    Menu(String ingredientsFile, String basesFile,String sidesFile) {
+    Menu(String ingredientsFile, String basesFile, String sidesFile) {
         pizza = new LinkedList<>();
         pizzaBases = new LinkedList<>();
         pizzaIngredients = new LinkedList<>();
         pizzaSides = new LinkedList<>();
 
-        FileLoader.loadMenuData(ingredientsFile,basesFile,sidesFile,pizzaIngredients,pizzaBases,pizzaSides);
+        FileLoader.loadMenuData(ingredientsFile, basesFile, sidesFile, pizzaIngredients, pizzaBases, pizzaSides);
     }
 
 
     <T extends Get> LinkedList<T> searchInMenu(LinkedList<T> listIngredients, String... ingredientsName) {
-        LinkedList<T> ingredients = new LinkedList<>();
+        LinkedList<T> newList = new LinkedList<>();
+        Map<String, T> itemMap = listIngredients.stream().collect(Collectors.toMap(T::getName, Function.identity()));
 
-        for (String i : ingredientsName) {
-            boolean flag = false;
-            for (T j : listIngredients) {
-                if (i.equals(j.getName())) {
-                    ingredients.add(j);
-                    flag = true;
-                    break;
-                }
-            }
-            if (!flag) {
-                throw new IllegalArgumentException();
-            }
+        for (String name : ingredientsName) {
+            newList.add(itemMap.get(name));
         }
-
-        return ingredients;
+        return newList;
     }
 
     LinkedList<Ingredient> getIngredients() {
@@ -340,40 +340,20 @@ class Menu {
         return searchInMenu(pizza, pizzaName).getFirst();
     }
 
-    <T extends AbstractComponent> void change(String name, String newName, double newPrice, LinkedList<T> pizzaIngredients) {
-        T ingredient = searchInMenu(pizzaIngredients, name).getFirst();
-        ingredient.setName(newName);
-        ingredient.setPrice(newPrice);
+    <T extends Get> void changeComponent(String name, LinkedList<T> listComponents, ComponentUpdater updater) {
+        T component = searchInMenu(listComponents, name).getFirst();
+
+        updater.update(component);
     }
 
-    void change(String name, String newName, double newPrice, LinkedList<PizzaSides> pizzaIngredients, LinkedList<String> newListOfPizzasUsed) {
-        PizzaSides pizzaSides = searchInMenu(pizzaIngredients, name).getFirst();
-        pizzaSides.setName(newName);
-        pizzaSides.setPrice(newPrice);
-        pizzaSides.setListOfPizzasUsed(newListOfPizzasUsed);
+    //добавление объектов с произвольной длинной аргументов конструктора
+    <T> void addComponent(String name, Double price, LinkedList<T> listComponents, Supplier<T> creator) {
+        listComponents.add(creator.get());
     }
 
-    void change(String name, int position, String newName, LinkedList<Ingredient> newIngredients, PizzaBase newBase) {
-        Pizza changePizza = searchInMenu(pizza, name).getFirst();
-        changePizza.setName(newName);
-        changePizza.setPizzaBase(newBase);
-        changePizza.setIngredients(position, newIngredients);
-    }
-
-    void addPizzaSides(String name, double price, LinkedList<String> pizzaSides) {
-        this.pizzaSides.add(new PizzaSides(name, price, pizzaSides));
-    }
-
-    void addIngredient(String name, double price) {
-        pizzaIngredients.add(new Ingredient(name, price));
-    }
-
-    void addBase(String name, double price) {
-        pizzaBases.add(new PizzaBase(name, price));
-    }
-
-    void addPizza(Pizza pizza) {
-        this.pizza.add(pizza);
+    //добавление объектов с 2-мя аргументами конструктора
+    <T> void addComponent(String name, Double price, LinkedList<T> listComponents, BiFunction<String, Double, T> creator) {
+        listComponents.add(creator.apply(name, price));
     }
 
     <T extends Get> void delete(String name, LinkedList<T> components) {
@@ -423,71 +403,111 @@ class Order implements Get {
 
 }
 
-class PizzaConstructor {
-    private String ingredientsFile;
-    private String basesFile;
-    private LinkedList<Order> savedOrder;
+class PizzaBuilder {
+    private String name;
+    private PizzaBase base;
+    private LinkedList<PieceOfPizza> pieces;
+    private boolean doubleIngredients;
+    private Menu menu;
 
-    Menu menu;
+    PizzaBuilder(String name, Menu menu) {
+        this.name = name;
+        this.menu = menu;
+    }
+
+    PizzaBuilder withBase(String base) {
+        this.base = menu.getBases(base);
+        return this;
+    }
+
+    PizzaBuilder addPieces(String sidesName, String... ingredients) {
+        pieces.add(new PieceOfPizza(menu.getSides(sidesName),
+                menu.getIngredients(ingredients)));
+
+        return this;
+    }
+
+    PizzaBuilder withDoubleIngredients(boolean doubleIngredients){
+        this.doubleIngredients = doubleIngredients;
+        return this;
+    }
+
+    PizzaBuilder addPieceFromTemplate(PieceOfPizza piece){
+        pieces.add(new PieceOfPizza(piece.getSides(),
+                new LinkedList<Ingredient>(piece.getIngredients())));
+
+        return this;
+    }
+
+    Pizza build(){
+        if(base==null||pieces.isEmpty()) throw new IllegalArgumentException();
+
+        if(doubleIngredients){
+            for(PieceOfPizza piece:pieces){
+                piece.doubleIngredients();
+            }
+        }
+
+        return new Pizza(name,base,pieces.toArray(new PieceOfPizza[0]));
+    }
+
+}
+
+class PizzaConstructor {
+    private final LinkedList<Order> savedOrder;
+    private final Menu menu;
 
     PizzaConstructor(String ingredientsFile, String basesFile) {
-        this.basesFile = basesFile;
-        this.ingredientsFile = ingredientsFile;
 
         this.savedOrder = new LinkedList<>();
-        this.menu = new Menu(ingredientsFile, basesFile);
+        this.menu = new Menu(ingredientsFile, basesFile, ingredientsFile);
     }
 
+    Pizza createPizzaFromMenu(String pizzaName,int numberOfPizzaSlices,boolean doubleIngredients){
+        Pizza template = menu.getPizza(pizzaName);
 
-    //создание пиццы из списка пицц
-    LinkedList<Pizza> createNewPizza(int numberOfPieces, boolean doubled, String... pizzaName) {
-        LinkedList<Pizza> newPizza = menu.searchInMenu(menu.getPizza(), pizzaName);
+        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu)
+                .withBase(template.getBase().getName())
+                .withDoubleIngredients(doubleIngredients);
 
-        for (Pizza pizza : newPizza) {
-            pizza.setNumberOfPieces(numberOfPieces);
+        for(int i=0;i<numberOfPizzaSlices;i++){
+            builder.addPieceFromTemplate(template.getPieces()[0]);
+        }
+        return builder.build();
+    }
 
-            if (doubled) {
-                for (PieceOfPizza pieces : pizza.getPieces()) {
-                    pieces.doublingIngredients();
-                }
-            }
+    Pizza createCombinedPizza(String pizzaName,int numberOfPizzaSlices,String ... pizzaNames){
+        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu);
+        PizzaBase commonBase = null;
+
+        if(numberOfPizzaSlices%pizzaName.length()!=0){
+            throw new IllegalArgumentException();
         }
 
-        return newPizza;
-    }
+        for(String name:pizzaNames){
+            Pizza pizza = menu.getPizza(name);
 
-    //создание пиццы из n-пиц
-    Pizza createNewPizza(int numberOfPieces, String... pizzaName) {
-        LinkedList<Pizza> pizzas = menu.searchInMenu(menu.getPizza(), pizzaName);
-        Pizza newPizza = pizzas.getFirst();
-
-        for (Pizza pizza : pizzas) {
-            if (!(newPizza.getBase().equals(pizza.getBase()))) {
+            if(commonBase==null){
+                commonBase = pizza.getBase();
+            }else if(commonBase.equals(pizza.getBase())){
                 throw new IllegalArgumentException();
             }
-        }
-        newPizza.setNumberOfPieces(numberOfPieces);
 
-        int partSize = newPizza.getPieces().length / pizzaName.length;
-
-        for (int i = 0; i < newPizza.getPieces().length; i += partSize) {
-            newPizza.setPieces(i, i + partSize, pizzas.get(i / partSize).getPieces());
+            for(int i=0;i<numberOfPizzaSlices/pizzaNames.length;i++){
+                builder.addPieceFromTemplate(pizza.getPieces()[i]);
+            }
         }
-        return newPizza;
+        return builder.build();
     }
 
-    //создание собственной пиццы
-    Pizza createNewPizza(String namePizza, String pizzaBase, String[] pizzaSides, String[][] ingredients) {
-        LinkedList<PieceOfPizza> newPieces = new LinkedList<>();
+    Pizza createCustomPizza(String pizzaName,String pizzaBase,String [] sides,String [][] ingredients){
+        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu).withBase(pizzaBase);
 
-        PizzaBase base = menu.getBases(pizzaBase);
-        LinkedList<PizzaSides> sides = menu.searchInMenu(menu.getSides(), pizzaSides);
-        for (int i = 0; i < ingredients.length; i++) {
-            LinkedList<Ingredient> newIngredients = menu.searchInMenu(menu.getIngredients(), ingredients[i]);
-            newPieces.add(new PieceOfPizza(sides.poll(), newIngredients));
+        for(int i=0;i<sides.length;i++){
+            builder.addPieces(sides[i],ingredients[i]);
         }
+        return builder.build();
 
-        return new Pizza(namePizza, base, newPieces.toArray(new PieceOfPizza[pizzaSides.length]));
     }
 
     Order createOrder(LinkedList<Pizza> pizza, String comments, Optional<LocalDate> date) {
@@ -500,7 +520,8 @@ class PizzaConstructor {
 
 class Constructor {
     public static void main(String[] args) {
-        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt", "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
+        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt",
+                "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
 
     }
 }
