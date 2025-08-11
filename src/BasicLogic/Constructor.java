@@ -6,6 +6,7 @@ import java.io.FileNotFoundException;
 import java.time.LocalDate;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -23,6 +24,18 @@ interface Set {
 
 interface ComponentUpdater {
     <T> void update(T component);
+}
+
+class Print {
+    static <T extends Get> void printComponent(LinkedList<T> componentList) {
+        for (T i : componentList) {
+            System.out.println(i.getName() + "\t" + i.getPrice());
+        }
+    }
+
+    static <T extends Get> void printComponent(LinkedList<T> componentList, Predicate<T> predicate){
+        componentList.stream().filter(predicate).forEach(System.out::println);
+    }
 }
 
 abstract class AbstractComponent implements Get, Set {
@@ -132,7 +145,7 @@ class PieceOfPizza {
         }
     }
 
-    LinkedList<Ingredient> getIngredients(){
+    LinkedList<Ingredient> getIngredients() {
         return ingredients;
     }
 
@@ -154,7 +167,7 @@ class PieceOfPizza {
         updatePrice();
     }
 
-    void doubleIngredients(){
+    void doubleIngredients() {
         LinkedList<Ingredient> copy = new LinkedList<>(ingredients);
         ingredients.addAll(copy);
     }
@@ -356,39 +369,35 @@ class Menu {
         listComponents.add(creator.apply(name, price));
     }
 
-    <T extends Get> void delete(String name, LinkedList<T> components) {
+    <T extends Get> void deleteComponent(String name, LinkedList<T> components) {
         components.remove(searchInMenu(components, name).getFirst());
-    }
-
-    <T extends Get> void print(LinkedList<T> componentList) {
-        for (T i : componentList) {
-            System.out.println(i.getName() + "\t" + i.getPrice());
-        }
     }
 
 }
 
 class Order implements Get {
     private double price;
-    private UUID orderNumber;
+    private int numberOfGuests;
+    private UUID orderID;
     private LinkedList<Pizza> pizza;
     private String comments;
     private LocalDate date;
     private LocalDate postponedDate;
 
-    Order(LinkedList<Pizza> newPizza, String comments, Optional<LocalDate> postponedDate) {
+    Order(LinkedList<Pizza> newPizza, String comments,int numberOfGuests,Optional<LocalDate> postponedDate) {
         this.pizza = newPizza;
+        this.numberOfGuests = numberOfGuests;
         this.comments = comments;
         this.date = LocalDate.now();
-        this.orderNumber = UUID.randomUUID();
-        this.price = getPrice();
+        this.orderID = UUID.randomUUID();
+        this.price = priceCalculation();
 
         if (postponedDate.isPresent()) {
             this.postponedDate = postponedDate.get();
         }
     }
 
-    public double getPrice() {
+    private double priceCalculation(){
         double price = 0;
 
         for (Pizza i : pizza) {
@@ -397,8 +406,20 @@ class Order implements Get {
         return price;
     }
 
+    double getPriceForEachGuests(){
+        return price/numberOfGuests;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
     public String getName() {
-        return orderNumber.toString();
+        return orderID.toString();
+    }
+
+    LocalDate getDate(){
+        return date;
     }
 
 }
@@ -427,28 +448,28 @@ class PizzaBuilder {
         return this;
     }
 
-    PizzaBuilder withDoubleIngredients(boolean doubleIngredients){
+    PizzaBuilder withDoubleIngredients(boolean doubleIngredients) {
         this.doubleIngredients = doubleIngredients;
         return this;
     }
 
-    PizzaBuilder addPieceFromTemplate(PieceOfPizza piece){
+    PizzaBuilder addPieceFromTemplate(PieceOfPizza piece) {
         pieces.add(new PieceOfPizza(piece.getSides(),
                 new LinkedList<Ingredient>(piece.getIngredients())));
 
         return this;
     }
 
-    Pizza build(){
-        if(base==null||pieces.isEmpty()) throw new IllegalArgumentException();
+    Pizza build() {
+        if (base == null || pieces.isEmpty()) throw new IllegalArgumentException();
 
-        if(doubleIngredients){
-            for(PieceOfPizza piece:pieces){
+        if (doubleIngredients) {
+            for (PieceOfPizza piece : pieces) {
                 piece.doubleIngredients();
             }
         }
 
-        return new Pizza(name,base,pieces.toArray(new PieceOfPizza[0]));
+        return new Pizza(name, base, pieces.toArray(new PieceOfPizza[0]));
     }
 
 }
@@ -463,65 +484,69 @@ class PizzaConstructor {
         this.menu = new Menu(ingredientsFile, basesFile, ingredientsFile);
     }
 
-    Pizza createPizzaFromMenu(String pizzaName,int numberOfPizzaSlices,boolean doubleIngredients){
+    Pizza createPizzaFromMenu(String pizzaName, int numberOfPizzaSlices, boolean doubleIngredients) {
         Pizza template = menu.getPizza(pizzaName);
 
-        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu)
+        PizzaBuilder builder = new PizzaBuilder(pizzaName, menu)
                 .withBase(template.getBase().getName())
                 .withDoubleIngredients(doubleIngredients);
 
-        for(int i=0;i<numberOfPizzaSlices;i++){
+        for (int i = 0; i < numberOfPizzaSlices; i++) {
             builder.addPieceFromTemplate(template.getPieces()[0]);
         }
         return builder.build();
     }
 
-    Pizza createCombinedPizza(String pizzaName,int numberOfPizzaSlices,String ... pizzaNames){
-        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu);
+    Pizza createCombinedPizza(String pizzaName, int numberOfPizzaSlices, String... pizzaNames) {
+        PizzaBuilder builder = new PizzaBuilder(pizzaName, menu);
         PizzaBase commonBase = null;
 
-        if(numberOfPizzaSlices%pizzaName.length()!=0){
+        if (numberOfPizzaSlices % pizzaName.length() != 0) {
             throw new IllegalArgumentException();
         }
 
-        for(String name:pizzaNames){
+        for (String name : pizzaNames) {
             Pizza pizza = menu.getPizza(name);
 
-            if(commonBase==null){
+            if (commonBase == null) {
                 commonBase = pizza.getBase();
-            }else if(commonBase.equals(pizza.getBase())){
+            } else if (commonBase.equals(pizza.getBase())) {
                 throw new IllegalArgumentException();
             }
 
-            for(int i=0;i<numberOfPizzaSlices/pizzaNames.length;i++){
+            for (int i = 0; i < numberOfPizzaSlices / pizzaNames.length; i++) {
                 builder.addPieceFromTemplate(pizza.getPieces()[i]);
             }
         }
         return builder.build();
     }
 
-    Pizza createCustomPizza(String pizzaName,String pizzaBase,String [] sides,String [][] ingredients){
-        PizzaBuilder builder = new PizzaBuilder(pizzaName,menu).withBase(pizzaBase);
+    Pizza createCustomPizza(String pizzaName, String pizzaBase, String[] sides, String[][] ingredients) {
+        PizzaBuilder builder = new PizzaBuilder(pizzaName, menu).withBase(pizzaBase);
 
-        for(int i=0;i<sides.length;i++){
-            builder.addPieces(sides[i],ingredients[i]);
+        for (int i = 0; i < sides.length; i++) {
+            builder.addPieces(sides[i], ingredients[i]);
         }
         return builder.build();
 
     }
 
-    Order createOrder(LinkedList<Pizza> pizza, String comments, Optional<LocalDate> date) {
-        Order newOrder = new Order(pizza, comments, date);
+    Order createOrder(LinkedList<Pizza> pizza, String comments,int numberOfGuests ,Optional<LocalDate> date) {
+        Order newOrder = new Order(pizza, comments,numberOfGuests,date);
         savedOrder.add(newOrder);
         return newOrder;
+    }
+
+    LinkedList<Order> getSavedOrder(){
+        return savedOrder;
     }
 }
 
 
 class Constructor {
     public static void main(String[] args) {
-        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Ingredients.txt",
-                "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\Bases.txt");
+        PizzaConstructor constructor = new PizzaConstructor("C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\BasicLogic\\Ingredients.txt",
+                "C:\\Users\\Kirill\\IdeaProjects\\Pizza\\src\\BasicLogic\\Bases.txt");
 
     }
 }
